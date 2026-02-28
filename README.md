@@ -30,11 +30,11 @@ CircleMM is a modern distributed system for searching and running Elo-based matc
 
 ## 🛠 Technology Stack
 
-- **Backend/API:** Fastify (WebSocket in development)
-- **Frontend:** Next.js (in development)  
-- **Discord Bot:** discord.js  
-- **osu! Bot:** bancho.js / osu-api-v2-js  
-- **Storage:** MySQL + Redis  
+- **Backend/API:** Fastify (WebSocket routes are in development)
+- **Frontend:** Next.js (in development)
+- **Discord Bot:** discord.js
+- **osu! Bot:** bancho.js / osu-api-v2-js
+- **Storage:** MySQL + Redis
 
 > Distributed architecture :NOWAY:
 
@@ -42,7 +42,18 @@ CircleMM is a modern distributed system for searching and running Elo-based matc
 
 ## 🚀 Competitive Advantages
 
-- Clean and modular code — match logic is centralized and maintainable.  
-- UX via Discord Interactions — matches are easier and faster to manage.  
-- Match recovery after restarts and unique account linking approach.  
+- Clean and modular code — match logic is centralized and maintainable.
+- UX via Discord Interactions — matches are easier and faster to manage.
+- Match recovery after restarts and unique account linking approach.
 - Fully open-source under **AGPLv3**.
+
+---
+
+## TODOs
+
+- [ ] Attach Redis to MatchRuntime and ability to recover matches
+- [ ] Make sure all interactions within MatchRuntime are expirable
+- [ ] Make WebSocket API routes
+- [ ] Make NextJS frontend
+- [ ] Create mega giga ultra super duper cool stream overlay for tourney client
+- [ ] Make torunament management system
