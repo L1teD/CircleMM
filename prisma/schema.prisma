@@ -1,0 +1,228 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Users
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id        Int     @id
+  discordId String? @unique
+  name      String
+  elo       Float   @default(1000)
+  peakElo   Float   @default(1000)
+
+  // Total completed matches. Used for Elo kFactor calibration — see src/matchmaking/elo.ts.
+  matchCount Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lobbies      Lobby[]           @relation("HostLobby")
+  guestLobbies Lobby[]           @relation("GuestLobby")
+  mapResults   PlayerMapResult[]
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Maps & Mappools
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Map {
+  id      Int    @id
+  artist  String
+  title   String
+  version String
+  stars   Float
+  cs      Float
+  ar      Float
+  od      Float
+  bpm     Float
+
+  // Hit-length in seconds (drain time, without breaks).
+  length Int
+
+  poolEntries PoolEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PoolEntry {
+  id       Int    @id @default(autoincrement())
+  mapId    Int
+  poolId   Int
+  mod      String
+  modIndex Int
+
+  map  Map     @relation(fields: [mapId], references: [id])
+  pool Mappool @relation(fields: [poolId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Mappool {
+  id         Int         @id @default(autoincrement())
+  tournament String
+  stage      String?
+  elo        Int
+  entries    PoolEntry[]
+
+  // Average star difficulty across all maps in the pool.
+  // Set automatically by the SQL script in prisma/compute_avg_stars.sql
+  // and updated whenever pool entries change.
+  avgStars Float @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  matchRecords MatchRecord[]
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Lobby (pre-match queue lobby)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Lobby {
+  id        Int         @id @default(autoincrement())
+  hostId    String      @unique
+  guestId   String?     @unique
+  mode      String?
+  autoLeave Int?
+  status    LobbyStatus @default(OPEN)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  host    User          @relation("HostLobby", fields: [hostId], references: [discordId])
+  guest   User?         @relation("GuestLobby", fields: [guestId], references: [discordId])
+  invites LobbyInvite[]
+}
+
+// Pending invite sent from a lobby host to another Discord user.
+model LobbyInvite {
+  id      String @id @default(cuid())
+  lobbyId Int
+  toId    String
+
+  lobby Lobby @relation(fields: [lobbyId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([lobbyId, toId])
+}
+
+enum LobbyStatus {
+  OPEN
+  QUEUING
+  CLOSED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Match history
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Top-level match record, created when a match concludes (completed, cancelled, or forfeited).
+model MatchRecord {
+  id     String      @id
+  bestOf Int
+  status MatchStatus
+
+  // JSON arrays of osu! user IDs for each team side.
+  teamAPlayerIds String
+  teamBPlayerIds String
+  teamAName      String
+  teamBName      String
+
+  scoreA Int @default(0)
+  scoreB Int @default(0)
+
+  // Winning side — null when match was cancelled without a result.
+  winner MatchSide?
+
+  poolId Int?
+  pool   Mappool? @relation(fields: [poolId], references: [id])
+
+  // Link to the osu! multiplayer lobby, e.g. https://osu.ppy.sh/mp/XXXXXXX
+  mpLink String?
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  mappoolBans MappoolBanRecord[]
+  mapBans     MapBanRecord[]
+  mapPicks    MapPickRecord[]
+  mapResults  PlayerMapResult[]
+}
+
+// Records which mappool each team banned during the pool-selection phase.
+model MappoolBanRecord {
+  id       Int       @id @default(autoincrement())
+  matchId  String
+  poolId   Int
+  bannedBy MatchSide
+
+  match MatchRecord @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+// Records a single map ban during the ban phase.
+model MapBanRecord {
+  id       Int       @id @default(autoincrement())
+  matchId  String
+  mapId    Int
+  bannedBy MatchSide
+
+  match MatchRecord @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+// Records a single map pick during the pick phase.
+model MapPickRecord {
+  id        Int       @id @default(autoincrement())
+  matchId   String
+  mapId     Int
+  pickedBy  MatchSide
+  pickOrder Int
+
+  match MatchRecord @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+// Per-player score on a specific map in a match.
+model PlayerMapResult {
+  id      Int       @id @default(autoincrement())
+  matchId String
+  mapId   Int
+  userId  Int
+  score   BigInt
+  accuracy Float
+  mods    String
+  team    MatchSide
+  winner  Boolean
+
+  match MatchRecord @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user  User        @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+enum MatchStatus {
+  COMPLETED
+  CANCELLED
+  FORFEITED
+}
+
+enum MatchSide {
+  A
+  B
+}
